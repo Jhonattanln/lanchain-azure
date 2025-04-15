@@ -15,8 +15,6 @@ os.environ["LANGCHAIN_TRACING_V2"] = "true" # enable tracing
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-credential = DefaultAzureCredential()
-
 
 ## Functions tools
 
