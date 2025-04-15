@@ -58,7 +58,6 @@ sys_msg = SystemMessage(content="You are a mathematical assistant. You can use t
 def assistant(state: MessagesState):
    return {"messages": [llm_with_tools.invoke([sys_msg] + state["messages"])]}
 
-
 # Graph
 builder = StateGraph(MessagesState)
 
@@ -74,6 +73,7 @@ builder.add_conditional_edges(
     # Se a última mensagem (resultado) da assistente não é uma chamada de ferramenta -> tools_condition roteia para END
     tools_condition,
 )
+
 builder.add_edge("tools", "assistant")
 react_graph = builder.compile()
 
@@ -81,10 +81,10 @@ react_graph = builder.compile()
 graph_png = react_graph.get_graph(xray=True).draw_mermaid_png()
 
 # Save to file
-with open("src/images/agent_graph.png", "wb") as f:
+with open("images/memory_agent.png", "wb") as f:
     f.write(graph_png)
 
-print("Graph saved as 'src/images/agent_graph.png'")
+print("Graph saved as 'images/momory_agent.png'")
 
 memory = MemorySaver()
 react_graph_memory = builder.compile(checkpointer=memory)
@@ -93,8 +93,6 @@ config = {"configurable": {"thread_id": "1"}}
 
 messages = [HumanMessage(content="Soma 3 e 4.")]
 messages = react_graph_memory.invoke({"messages": messages},config)
-#for m in messages['messages']:
-#    m.pretty_print()
 
 messages = [HumanMessage(content="Multiplique isso por 2.")]
 messages = react_graph_memory.invoke({"messages": messages}, config)
