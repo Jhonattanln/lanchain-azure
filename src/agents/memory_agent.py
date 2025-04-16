@@ -1,6 +1,6 @@
 import dotenv
 import os
-from langchain_openai import ChatOpenAI
+from langchain_openai import AzureChatOpenAI
 from azure.identity import DefaultAzureCredential
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState
@@ -9,11 +9,14 @@ from langgraph.graph import START, StateGraph
 from langgraph.prebuilt import tools_condition, ToolNode
 
 dotenv.load_dotenv()
+credential = DefaultAzureCredential()
 
 os.environ["LANGSMITH_PROJECT"] = "memory agent test" # project name in langsmith
 os.environ["LANGCHAIN_TRACING_V2"] = "true" # enable tracing
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+#OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+AZURE_OPENAI_ACCOUNT = os.getenv("AZURE_OPENAI_ACCOUNT")
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 
 
 ## Functions tools
@@ -47,12 +50,17 @@ def divide(a: int, b: int) -> float:
     return a / b
 
 tools = [add, multiply, divide] # create a list of tools
-llm = ChatOpenAI(model='gpt-4o-mini')
+
+llm = AzureChatOpenAI(model='gpt-4o-mini', 
+                  api_key=AZURE_OPENAI_API_KEY,
+                  api_version='2024-12-01-preview',
+                  azure_endpoint=AZURE_OPENAI_ACCOUNT
+                  )
 
 llm_with_tools = llm.bind_tools(tools)
 
 # Default system message
-sys_msg = SystemMessage(content="You are a mathematical assistant. You can use the tools to do math operations. You will response in brazilian portuguese.")
+sys_msg = SystemMessage(content="You are a mathematical assistant. You can use the tools to do math operations. You will respond in Brazilian Portuguese.")
 
 # Node
 def assistant(state: MessagesState):

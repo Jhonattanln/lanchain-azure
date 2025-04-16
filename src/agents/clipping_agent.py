@@ -65,3 +65,14 @@ with open("images/clipping_agent.png", "wb") as f:
     f.write(graph_png)
 
 print("Graph saved as 'images/clipping_agent.png'")
+
+memory = MemorySaver()
+react_graph_memory = builder.compile(checkpointer=memory)
+
+config = {"configurable": {"thread_id": "1"}}
+
+messages = [HumanMessage(content="Quais as novas noticias da Quartzo Capital")]
+messages = react_graph_memory.invoke({"messages": messages},config)
+
+for m in messages['messages']:
+    m.pretty_print()
