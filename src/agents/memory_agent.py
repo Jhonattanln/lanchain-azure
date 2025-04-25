@@ -51,7 +51,7 @@ def divide(a: int, b: int) -> float:
 
 tools = [add, multiply, divide] # create a list of tools
 
-llm = AzureChatOpenAI(model='gpt-4o-mini', 
+llm = AzureChatOpenAI(model='gpt-4o-mini',
                   api_key=AZURE_OPENAI_API_KEY,
                   api_version='2024-12-01-preview',
                   azure_endpoint=AZURE_OPENAI_ACCOUNT

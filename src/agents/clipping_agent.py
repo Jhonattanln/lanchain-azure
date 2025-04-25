@@ -49,17 +49,24 @@ llm_with_tools = model.bind_tools(tool)
 ### Agents
 
 # Search instructions
-prompt_engineer = """
+PROMPT_ENGINEER = """
 You are a prompt engineer. You will be given a question and you need format it to be used in a search engine.  
 """
 
-instrucions = SystemMessage(content=prompt_engineer)
+instrucions = SystemMessage(content=PROMPT_ENGINEER)
 
-def search_instructions(query: str) -> str:
+def search_instructions(question: str) -> str:
     """Format the query to be used in a search engine.
 
     Args:
         query: The query to format.
     """
-    return llm_with_tools([instrucions, HumanMessage(content=query)])
+    return model.invoke(
+        [
+            instrucions,
+            HumanMessage(content=question)
+        ]
+    ).content
+
+
 
