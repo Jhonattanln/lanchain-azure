@@ -46,6 +46,35 @@ model = AzureAIChatCompletionsModel(
 
 llm_with_tools = model.bind_tools(tool)
 
+
+### State graph
+class ClippingAgent(BaseModel):
+    """Clipping agent to search the web and summarize the results."""
+    prompt: str = Field(
+        description="The prompt to use for the agent.",
+        default="You are a clipping agent. You will be given a question and you need to search the web and summarize the results."
+    )
+    tools: list = Field(
+        description="The tools to use for the agent.",
+        default=tool
+    )
+    memory: MemorySaver = Field(
+        description="The memory to use for the agent.",
+        default=MemorySaver()
+    )
+    # Tavily results list
+    tavily_search: list[TavilySearch] = Field(
+        description="The search engine to use for the agent.",
+        default=[]
+    )
+    summaty: str = Field(
+        description="The summary of the search results.",
+        default="You are a clipping agent. You will be given a question and you need to search the web and summarize the results."
+    )
+
+
+
+
 ### Agents
 
 # Search instructions
