@@ -57,7 +57,7 @@ llm = AzureChatOpenAI(model='gpt-4o-mini',
                   azure_endpoint=AZURE_OPENAI_ACCOUNT
                   )
 
-llm_with_tools = llm.bind_tools(tools)
+llm_with_tools = llm.bind_tools([tools])
 
 # Default system message
 sys_msg = SystemMessage(content="You are a mathematical assistant. You can use the tools to do math operations. You will respond in Brazilian Portuguese.")
