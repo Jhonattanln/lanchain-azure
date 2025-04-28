@@ -32,7 +32,9 @@ def web_search_tool(query: str) -> str:
     Returns:
         Search results as text
     """
-    search = TavilySearch(max_results=2, topic='news')
+    search = TavilySearch(max_results=2,
+                        topic='news',
+                        time_range='week')
     results = search.invoke(query)
     return str(results)
 
