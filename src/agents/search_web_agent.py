@@ -1,13 +1,14 @@
 import dotenv
 import os
-from langchain_openai import AzureChatOpenAI
+from typing import List, Dict, Any
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from azure.identity import DefaultAzureCredential
 from langgraph.graph import MessagesState
 from langgraph.graph import START, StateGraph, END
 from langgraph.prebuilt import tools_condition, ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_tavily import TavilySearch
-from pydantic import BaseModel, Field
+from langchain_core.tools import tool
 
 dotenv.load_dotenv()
 credential = DefaultAzureCredential()
@@ -17,67 +18,62 @@ os.environ["LANGCHAIN_TRACING_V2"] = "true" # enable tracing
 
 AZURE_OPENAI_ACCOUNT = os.getenv("AZURE_OPENAI_ACCOUNT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
-class ClippingAgent(BaseModel):
-    """Clipping agent to search the web and summarize the results."""
-    prompt: str 
-    response: str
+# Define the search tool using the @tool decorator
+@tool
+def web_search_tool(query: str) -> str:
+    """Search the web for information.
     
-
-
-# Funcions tools
-def web_search(query: str) -> str:
-    """Search the web for a query.
-
     Args:
-        query: The query to search for.
+        query: The search query
+    
+    Returns:
+        Search results as text
     """
-    search_web = TavilySearch(
-        max_results=5,
-        topic='general'
-    )
-    search_web.invoke({"query": query})
+    search = TavilySearch(max_results=2, topic='news')
+    results = search.invoke(query)
+    return str(results)
 
-tools = [web_search] # create a list of tools
+# Set up the LLM
+model = ChatOpenAI(model='gpt-4o-mini')
 
-model = AzureChatOpenAI(model='gpt-4o-mini',
-                  api_key=AZURE_OPENAI_API_KEY,
-                  api_version='2024-12-01-preview',
-                  azure_endpoint=AZURE_OPENAI_ACCOUNT
-                  )
+# Bind the tool to the model
+llm_with_tools = model.bind_tools([web_search_tool])
 
-llm_with_tools = model.bind_tools(tools)
+# System message for the agent
+sys_message = SystemMessage(content='You are a web search agent. You will be given a question and you need to search the web and summarize the results.')
 
-sys_message = SystemMessage("You are a clipping agent. You will be given a question and you need to search the web and summarize the results.")
+# Define the agent node function with a different name to avoid conflicts
+def agent_node(state: MessagesState):
+    """Process messages and generate a response with tool usage."""
+    messages = [sys_message] + state['messages']
+    response = llm_with_tools.invoke(messages)
+    return {'messages': [response]}
 
-# Node
+# Build the agent graph
+builder = StateGraph(MessagesState)
 
-def search_agent(state: ClippingAgent):
-    """Search the web for a query and summarize the results."""
+# Add nodes to the graph
+builder.add_node("agent", agent_node)
+builder.add_node("tools", ToolNode([web_search_tool]))
 
+# Connect the nodes
+builder.add_edge(START, "agent")
+builder.add_conditional_edges(
+    "agent",
+    tools_condition
+)
+builder.add_edge("tools", "agent")
+builder.add_edge("agent", END)
 
-builder = StateGraph(ClippingAgent)
+# Compile the graph
+react_graph = builder.compile()
 
-builder.add_node("search_agent", search_agent)
-builder.add_node('tools', ToolNode(tools))
-
-builder.add_edge(START, 'search_agent')
-builder.add_conditional_edges('search_agent', tools_condition)
-builder.add_edge('tools', 'search_agent')
-builder.add_edge('search_agent', END)
-
-react_agent = builder.compile()
-
-graph_png = react_agent.get_graph(xray=True).draw_mermaid_png()
-
-# Save to file
-with open("images/search_web.png", "wb") as f:
-    f.write(graph_png)
-
-print("Graph saved as 'images/search_web.png'")
-
-config = {"configurable": {"thread_id": "1"}}
-
-react_agent.invoke({"prompt": "Qual é a capital do Brasil?"})
-
+# Test the agent
+if __name__ == "__main__":
+    query = "Quartzo Capital"
+    message = [HumanMessage(content=query)]
+    result = react_graph.invoke({"messages": message})
+    print(result)
