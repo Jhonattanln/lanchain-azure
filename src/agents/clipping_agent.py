@@ -94,6 +94,7 @@ def search_instructions(state: ClippingAgent):
 def search_web(state: ClippingAgent):
     """Search the web for the query."""
     # Get the question from the state
+    search_tool = 
     question = state.prompt
     # Search the web for the question
     search_results = {"tavily_search": [llm_with_tools.invoke([instrucions] + state.tavily_search)]}
