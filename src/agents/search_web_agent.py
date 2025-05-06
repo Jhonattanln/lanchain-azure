@@ -32,9 +32,11 @@ def web_search_tool(query: str) -> str:
     Returns:
         Search results as text
     """
-    search = TavilySearch(max_results=2,
+    search = TavilySearch(max_results=5,
                         topic='news',
-                        time_range='week')
+                        time_range='week',
+                        search_depth='advanced',
+                        include_answer=True)
     results = search.invoke(query)
     return str(results)
 
@@ -75,7 +77,7 @@ react_graph = builder.compile()
 
 # Test the agent
 if __name__ == "__main__":
-    query = "Quartzo Capital"
+    query = "Quais as últimas notícias sobre o Paraná Clube"
     message = [HumanMessage(content=query)]
     result = react_graph.invoke({"messages": message})
     print(result)
