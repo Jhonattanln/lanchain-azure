@@ -27,7 +27,12 @@ search_model = ChatPerplexity( # perplexity model to search the web
     model="sonar-pro"
 )
 
-
+analyze_model = AzureChatOpenAI( # openai model to analyze the search results
+    azure_deployment="o3-mini",
+    api_version="2025-01-31",
+    temperature=0,
+    max_tokens=1000
+) 
 
 
 # StateGraph and Schema
