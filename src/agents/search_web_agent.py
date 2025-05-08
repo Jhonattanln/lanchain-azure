@@ -121,7 +121,7 @@ except Exception as e:
 if __name__ == "__main__":
     try:
         logger.info("Iniciando agente de busca web")
-        result = graph.invoke(SearchWebAgent(query="últimas notícias sobre Paraná Clube"))
+        result = graph.invoke(SearchWebAgent(query="Quais são as últimas notícias sobre a Quartzo Capital?"))
         
         print("\nResultados da busca:")
         print(result["search_results"])
