@@ -1,96 +1,132 @@
 import dotenv
 import os
+import logging
 from typing import List, Dict, Any, Optional
+from typing_extensions import TypedDict
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain_perplexity import ChatPerplexity
 from azure.identity import DefaultAzureCredential
-from langgraph.graph import MessagesState
+from azure.core.exceptions import AzureError
 from langgraph.graph import START, StateGraph, END
-from langgraph.prebuilt import tools_condition, ToolNode
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langgraph.checkpoint.memory import MemorySaver
 
+# Configurar logging para melhor observabilidade
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
+# Variáveis
 dotenv.load_dotenv()
-credential = DefaultAzureCredential()
+
+# Usar DefaultAzureCredential para autenticação segura
+try:
+    credential = DefaultAzureCredential()
+    logger.info("Autenticação com Azure DefaultAzureCredential bem-sucedida")
+except Exception as e:
+    logger.error(f"Erro de autenticação: {str(e)}")
+    raise
 
 os.environ["LANGSMITH_PROJECT"] = "web search" # project name in langsmith
 os.environ["LANGCHAIN_TRACING_V2"] = "true" # enable tracing
 
+# Carregar variáveis de ambiente com verificação
 AZURE_OPENAI_ACCOUNT = os.getenv("AZURE_OPENAI_ACCOUNT")
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 
+if not all([AZURE_OPENAI_ACCOUNT, AZURE_OPENAI_API_KEY, PERPLEXITY_API_KEY]):
+    logger.error("Variáveis de ambiente necessárias não estão definidas")
+    raise ValueError("Configure todas as variáveis de ambiente necessárias")
+
 # Models
-search_model = ChatPerplexity( # perplexity model to search the web
-    temperature=.1,
-    pplx_api_key=PERPLEXITY_API_KEY,
-    model="sonar-pro"
-)
+try:
+    # Modelo Perplexity para busca na web
+    search_model = ChatPerplexity(
+        temperature=.1,
+        pplx_api_key=PERPLEXITY_API_KEY,
+        model="sonar-pro"
+    )
+    
+    # Modelo Azure OpenAI para análise dos resultados
+    analyze_model = AzureChatOpenAI(
+        azure_deployment="o3-mini",
+        azure_endpoint=AZURE_OPENAI_ACCOUNT,
+        api_version="2025-01-31",
+        temperature=0,
+        max_tokens=1000
+    )
+    logger.info("Modelos inicializados com sucesso")
+except Exception as e:
+    logger.error(f"Erro ao inicializar modelos: {str(e)}")
+    raise
 
-analyze_model = AzureChatOpenAI( # openai model to analyze the search results
-    azure_deployment="o3-mini",
-    azure_endpoint=AZURE_OPENAI_ACCOUNT,
-    api_version="2025-01-31",
-    temperature=0,
-    max_tokens=1000
-) 
+# State usando BaseModel ao invés de TypedDict para melhor validação
+class SearchWebAgent(BaseModel):
+    query: str
+    search_results: List[Dict[str, Any]] = []
 
-instrucao = """
-You are a web search agent. Your task is to search the web for information about {query}"""
-
-# StateGraph and Schema
-class SearchWeb(BaseModel):
-    query: str # search query
-    response: Optional[list[Dict[str, Any]]] # search perplexity response
-    answer: Optional[str] # answer to the query
-
-# Generate nodes
-def search_web(state: SearchWeb):
+# Node com tratamento de erro adequado
+def search_web_node(state):
+    """Search the web for the query in the state and update the state with the results."""
     try:
-        prompt = state["query"]
-        response_schema = List[Dict[str, Any]]
-        response = search_model.with_structured_output(response_schema)
-        system_message = instrucao.format(query=prompt)
-        search_results = response.invoke([SystemMessage(content=system_message)] + [HumanMessage(content="Faça uma busca na web")])
-        return {'query': prompt, 'response': search_results}
+        # Criando mensagem ao invés de passar string diretamente
+        messages = [HumanMessage(content=state.query)]
+        logger.info(f"Realizando busca na web para: {state.query}")
+        
+        # Usar .invoke() ao invés do método depreciado __call__
+        response = search_model.invoke(messages)
+        
+        # Extrair conteúdo da resposta
+        if hasattr(response, 'content'):
+            search_results = response.content
+        else:
+            search_results = str(response)
+            
+        logger.info("Busca na web concluída com sucesso")
+        
+        # Atualizar o estado com os resultados
+        return {"search_results": search_results}
+    except AzureError as e:
+        logger.error(f"Erro Azure na busca web: {str(e)}")
+        return {"search_results": [{"error": str(e)}]}
     except Exception as e:
-        print(f"Erro ao buscar informações: {e}")
-        return {'query': prompt, 'response': [], 'answer': f"Erro na busca: {str(e)}"}
+        logger.error(f"Erro na busca web: {str(e)}")
+        return {"search_results": [{"error": str(e)}]}
 
-def analyze_search(state: SearchWeb):
-    data = state['response']
-    query = state['query']
-    prompt = f"""Analise os resultados da busca para a query: {query}. Os resultados são: {data}."""
-    # analyze the search results
-    response = analyze_model.invoke([SystemMessage(content=prompt)])
-    return {'query': query, 'response': data, 'answer': response.content} # return the analysis result
+# Construir o grafo
+builder = StateGraph(SearchWebAgent)
+builder.add_node('search_web', search_web_node)
+builder.add_edge(START, 'search_web')
+builder.add_edge('search_web', END)
 
-# Define nodes and edges
-constructor = StateGraph(SearchWeb)
-constructor.add_node("search_web", search_web)
-constructor.add_node("analyze_search", analyze_search)
-constructor.add_edge(START, "search_web")
-constructor.add_edge("search_web", "analyze_search")
-constructor.add_edge("analyze_search", END)
+# Compilar o grafo com tratamento de erro
+try:
+    graph = builder.compile()
+    logger.info("Grafo compilado com sucesso")
+except Exception as e:
+    logger.error(f"Erro ao compilar grafo: {str(e)}")
+    raise
 
-# Compile the graph
-memory = MemorySaver()
-graph = constructor.compile()
+# Criar visualização do grafo
+try:
+    graph_png = graph.get_graph(xray=True).draw_mermaid_png()
+    with open("images/perplexity_agent.png", "wb") as f:
+        f.write(graph_png)
+    logger.info("Visualização do grafo salva com sucesso")
+except Exception as e:
+    logger.error(f"Erro ao criar visualização do grafo: {str(e)}")
 
-# View the graph
-graph_png = graph.get_graph(xray=True).draw_mermaid_png()
-
-# Save to file
-with open("images/search_web_agent.png", "wb") as f:
-    f.write(graph_png)
-print("Graph saved as 'images/search_web_agent.png'")
-
-
-initial_state = {
-    "query": "Paraná Clube"  # O campo obrigatório para iniciar a busca
-}
-resultado = graph.invoke(initial_state)
-print(resultado)
-
+# Executar o grafo com tratamento de erro adequado
+if __name__ == "__main__":
+    try:
+        logger.info("Iniciando agente de busca web")
+        result = graph.invoke(SearchWebAgent(query="últimas notícias sobre Paraná Clube"))
+        
+        print("\nResultados da busca:")
+        print(result["search_results"])
+        
+        logger.info("Agente de busca web concluído com sucesso")
+    except Exception as e:
+        logger.error(f"Erro ao executar agente de busca web: {str(e)}")
+        raise
