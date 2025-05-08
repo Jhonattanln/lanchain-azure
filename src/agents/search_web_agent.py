@@ -67,6 +67,8 @@ class SearchWebAgent(BaseModel):
     search_results: List[Dict[str, Any]] = []
 
 # Node com tratamento de erro adequado
+sys_message = SystemMessage(content="You are a M&A analyst, that can search the web and summarize the results. Your focus is to find the latest news about brazilian merges and acquisitions. You can create thesis and analyze the results. You will respond in Brazilian Portuguese.")
+
 def search_web_node(state):
     """Search the web for the query in the state and update the state with the results."""
     try:
@@ -121,7 +123,7 @@ except Exception as e:
 if __name__ == "__main__":
     try:
         logger.info("Iniciando agente de busca web")
-        result = graph.invoke(SearchWebAgent(query="Quais são as últimas notícias sobre a Quartzo Capital?"))
+        result = graph.invoke(SearchWebAgent(query="Informações sobre o mercado de tilápia no Brasil"))
         
         print("\nResultados da busca:")
         print(result["search_results"])
